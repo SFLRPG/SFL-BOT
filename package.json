@@ -1,0 +1,17 @@
+{
+  "name": "sfl-bot",
+  "version": "2.0.0",
+  "description": "SFL Discord Bot with monitoring and leveling system",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "sqlite3": "^5.1.6",
+    "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
