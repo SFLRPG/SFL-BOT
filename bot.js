@@ -1,6 +1,7 @@
-// SFL-BOT 升級版 - 指定頻道指令版本
+// SFL-BOT 升級版 - 自動監控版本
 // 管理員指令 → 頻道ID: 1402338913258836108
 // 一般指令 → 頻道ID: 1402341842023878697
+// 自動監控 → 頻道ID: 1402338913258836108 (刪除記錄、離開記錄)
 
 const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
 const sqlite3 = require('sqlite3').verbose();
@@ -28,9 +29,9 @@ const CONFIG = {
     LEVEL_MULTIPLIER: 100,
     
     // 指定頻道ID
-    ADMIN_CHANNEL_ID: '1402338913258836108',   // 管理員指令頻道
+    ADMIN_CHANNEL_ID: '1402338913258836108',   // 管理員指令頻道 + 自動監控
     USER_CHANNEL_ID: '1402341842023878697',    // 一般使用者指令頻道
-    LOG_CHANNEL_NAME: 'bot-日誌',              // 監控日誌頻道（保持原有功能）
+    LOG_CHANNEL_NAME: 'bot-日誌',              // 備用日誌頻道
     
     LEVEL_ROLES: {
         5: '活躍成員',
@@ -102,7 +103,12 @@ function formatDate(timestamp) {
     });
 }
 
-// 取得日誌頻道
+// 取得管理員頻道（用於自動監控）
+function getAdminChannel(guild) {
+    return guild.channels.cache.get(CONFIG.ADMIN_CHANNEL_ID);
+}
+
+// 取得日誌頻道（備用）
 async function getLogChannel(guild) {
     if (CONFIG.LOG_CHANNEL_NAME) {
         return guild.channels.cache.find(ch => ch.name === CONFIG.LOG_CHANNEL_NAME && ch.type === ChannelType.GuildText);
@@ -128,9 +134,10 @@ client.once('ready', async () => {
     console.log(`🔗 在 ${client.guilds.cache.size} 個伺服器中運行`);
     console.log(`📋 管理員指令頻道: ${CONFIG.ADMIN_CHANNEL_ID}`);
     console.log(`👤 一般使用者指令頻道: ${CONFIG.USER_CHANNEL_ID}`);
+    console.log(`🔍 自動監控頻道: ${CONFIG.ADMIN_CHANNEL_ID}`);
     
     initDatabase();
-    client.user.setActivity('監控伺服器活動', { type: 'WATCHING' });
+    client.user.setActivity('自動監控伺服器活動', { type: 'WATCHING' });
     
     // 註冊斜線命令
     try {
@@ -550,59 +557,70 @@ client.on('messageCreate', async message => {
     });
 });
 
-// 監控刪除的訊息（發送到日誌頻道）
+// 【修改】監控刪除的訊息 - 自動發送到管理員頻道
 client.on('messageDelete', async message => {
     if (!message.author || message.author.bot || !message.guild) return;
 
     const attachments = message.attachments.size > 0 ? 
         Array.from(message.attachments.values()).map(att => att.url).join(', ') : '';
 
+    // 儲存到資料庫
     db.run(`INSERT INTO deleted_messages 
            (message_id, user_id, username, channel_id, channel_name, content, deleted_at, attachments, guild_id)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [message.id, message.author.id, message.author.username, message.channel.id, 
          message.channel.name, message.content || '', Date.now(), attachments, message.guild.id]);
 
-    const logChannel = await getLogChannel(message.guild);
-    if (logChannel) {
+    // 【重點修改】自動發送到管理員頻道
+    const adminChannel = getAdminChannel(message.guild);
+    if (adminChannel) {
         const embed = new EmbedBuilder()
             .setColor(0xe74c3c)
-            .setTitle('🗑️ 訊息被刪除')
+            .setTitle('🗑️ 即時監控：訊息被刪除')
             .addFields(
                 { name: '👤 用戶', value: `${message.author.username}`, inline: true },
                 { name: '📍 頻道', value: `${message.channel.name}`, inline: true },
                 { name: '⏰ 時間', value: formatDate(Date.now()), inline: true },
                 { name: '💬 內容', value: message.content || '(無文字內容)', inline: false }
             )
-            .setFooter({ text: `ID: ${message.id}` })
+            .setFooter({ text: `訊息ID: ${message.id} | 自動監控` })
             .setTimestamp();
 
         if (attachments) {
             embed.addFields({ name: '📎 附件', value: attachments, inline: false });
         }
 
-        logChannel.send({ embeds: [embed] });
+        try {
+            await adminChannel.send({ embeds: [embed] });
+            console.log(`✅ 刪除記錄已自動發送到管理員頻道: ${message.author.username}`);
+        } catch (error) {
+            console.error('❌ 發送刪除記錄失敗:', error);
+        }
+    } else {
+        console.warn('⚠️ 找不到管理員頻道，無法發送刪除記錄');
     }
 });
 
-// 監控成員離開（發送到日誌頻道）
+// 【修改】監控成員離開 - 自動發送到管理員頻道  
 client.on('guildMemberRemove', async member => {
     const roles = member.roles.cache.map(role => role.name).join(', ');
     
+    // 儲存到資料庫
     db.run(`INSERT INTO member_leaves 
            (user_id, username, discriminator, join_date, leave_date, roles, guild_id)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [member.id, member.user.username, member.user.discriminator, 
          member.joinedTimestamp, Date.now(), roles, member.guild.id]);
 
-    const logChannel = await getLogChannel(member.guild);
-    if (logChannel) {
+    // 【重點修改】自動發送到管理員頻道
+    const adminChannel = getAdminChannel(member.guild);
+    if (adminChannel) {
         const joinDuration = member.joinedTimestamp ? 
             `${Math.floor((Date.now() - member.joinedTimestamp) / (1000 * 60 * 60 * 24))} 天` : '未知';
 
         const embed = new EmbedBuilder()
             .setColor(0x95a5a6)
-            .setTitle('👋 成員離開')
+            .setTitle('👋 即時監控：成員離開')
             .setThumbnail(member.user.displayAvatarURL())
             .addFields(
                 { name: '👤 用戶', value: `${member.user.username}#${member.user.discriminator}`, inline: true },
@@ -610,35 +628,49 @@ client.on('guildMemberRemove', async member => {
                 { name: '📅 待了', value: joinDuration, inline: true },
                 { name: '🏷️ 身分組', value: roles || '無', inline: false }
             )
-            .setFooter({ text: `離開時間: ${formatDate(Date.now())}` })
+            .setFooter({ text: `離開時間: ${formatDate(Date.now())} | 自動監控` })
             .setTimestamp();
 
-        logChannel.send({ embeds: [embed] });
+        try {
+            await adminChannel.send({ embeds: [embed] });
+            console.log(`✅ 離開記錄已自動發送到管理員頻道: ${member.user.username}`);
+        } catch (error) {
+            console.error('❌ 發送離開記錄失敗:', error);
+        }
+    } else {
+        console.warn('⚠️ 找不到管理員頻道，無法發送離開記錄');
     }
 });
 
-// 歡迎新成員（發送到日誌頻道）
+// 歡迎新成員（發送到管理員頻道）
 client.on('guildMemberAdd', async member => {
+    // 儲存到資料庫
     db.run(`INSERT OR REPLACE INTO user_levels 
            (user_id, username, xp, level, messages_count, last_message_time, join_date, guild_id) 
            VALUES (?, ?, 0, 1, 0, 0, ?, ?)`,
         [member.id, member.user.username, Date.now(), member.guild.id]);
 
-    const logChannel = await getLogChannel(member.guild);
-    if (logChannel) {
+    // 發送到管理員頻道
+    const adminChannel = getAdminChannel(member.guild);
+    if (adminChannel) {
         const embed = new EmbedBuilder()
             .setColor(0x2ecc71)
-            .setTitle('🎉 新成員加入')
+            .setTitle('🎉 即時監控：新成員加入')
             .setThumbnail(member.user.displayAvatarURL())
             .addFields(
                 { name: '👤 用戶', value: `${member.user.username}#${member.user.discriminator}`, inline: true },
                 { name: '🆔 ID', value: member.id, inline: true },
                 { name: '📊 成員總數', value: `${member.guild.memberCount}`, inline: true }
             )
-            .setFooter({ text: `加入時間: ${formatDate(Date.now())}` })
+            .setFooter({ text: `加入時間: ${formatDate(Date.now())} | 自動監控` })
             .setTimestamp();
 
-        logChannel.send({ embeds: [embed] });
+        try {
+            await adminChannel.send({ embeds: [embed] });
+            console.log(`✅ 加入記錄已自動發送到管理員頻道: ${member.user.username}`);
+        } catch (error) {
+            console.error('❌ 發送加入記錄失敗:', error);
+        }
     }
 });
 
@@ -654,4 +686,4 @@ client.on('error', error => {
 // 啟動機器人
 client.login(process.env.DISCORD_TOKEN);
 
-console.log('🚀 SFL-BOT 正在啟動...');
+console.log('🚀 SFL-BOT 自動監控版正在啟動...');
