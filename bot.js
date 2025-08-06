@@ -5,7 +5,9 @@
 
 const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
 const sqlite3 = require('sqlite3').verbose();
-require('dotenv').config();
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
 
 // 🔥 Firebase Admin SDK 初始化（使用分離的環境變數）
 const admin = require('firebase-admin');
