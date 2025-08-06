@@ -13,7 +13,7 @@ const admin = require('firebase-admin');
 // 從環境變數讀取服務帳號
 let firestore = null;
 try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || '{}');
     
     if (serviceAccount.project_id) {
         admin.initializeApp({
