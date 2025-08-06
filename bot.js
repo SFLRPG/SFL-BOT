@@ -288,62 +288,6 @@ client.once('ready', async () => {
     client.user.setActivity('監控伺服器', { type: 'WATCHING' });
 });
 
-// 訊息創建事件（經驗值系統）
-client.on('messageCreate', async message => {
-    if (message.author.bot || !message.guild) return;
-    
-    const userId = message.author.id;
-    const username = message.author.username;
-    const guildId = message.guild.id;
-    const now = Date.now();
-    
-    db.get(`SELECT * FROM user_levels WHERE user_id = ? AND guild_id = ?`, 
-        [userId, guildId], (err, row) => {
-        if (err) return console.error(err);
-        
-        if (!row) {
-            db.run(`INSERT INTO user_levels 
-                   (user_id, username, xp, level, messages_count, last_message_time, join_date, guild_id) 
-                   VALUES (?, ?, ?, 1, 1, ?, ?, ?)`,
-                [userId, username, CONFIG.XP_PER_MESSAGE, now, now, guildId]);
-        } else {
-            if (now - row.last_message_time < CONFIG.XP_COOLDOWN) return;
-            
-            const newXP = row.xp + CONFIG.XP_PER_MESSAGE;
-            const currentLevel = row.level;
-            let newLevel = currentLevel;
-            
-            while (newXP >= getXPForLevel(newLevel + 1)) {
-                newLevel++;
-            }
-            
-            db.run(`UPDATE user_levels 
-                   SET xp = ?, level = ?, messages_count = ?, last_message_time = ?, username = ?
-                   WHERE user_id = ? AND guild_id = ?`,
-                [newXP, newLevel, row.messages_count + 1, now, username, userId, guildId]);
-            
-            if (newLevel > currentLevel) {
-                const embed = new EmbedBuilder()
-                    .setColor(0xffd700)
-                    .setTitle('🎉 升級！')
-                    .setDescription(`恭喜 <@${userId}> 升到了 **${newLevel}** 級！`)
-                    .setTimestamp();
-                
-                message.channel.send({ embeds: [embed] });
-                
-                // 自動給予身分組
-                const roleName = CONFIG.LEVEL_ROLES[newLevel];
-                if (roleName) {
-                    const role = message.guild.roles.cache.find(r => r.name === roleName);
-                    if (role && message.member) {
-                        message.member.roles.add(role).catch(console.error);
-                    }
-                }
-            }
-        }
-    });
-});
-
 // 訊息刪除事件
 client.on('messageDelete', async message => {
     if (!message.guild || message.author?.bot) return;
