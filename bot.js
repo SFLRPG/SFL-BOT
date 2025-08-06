@@ -870,7 +870,7 @@ async function handleLinkPanelCommand(interaction) {
         const linkButton = new ButtonBuilder()
             .setCustomId('link_button')
             .setLabel('🔗 連結帳號')
-            .setStyle(ButtonStyle.Primary);
+            .setStyle(ButtonStyle.Success);
 
         const actionRow = new ActionRowBuilder()
             .addComponents(checkLinkButton, linkButton);
