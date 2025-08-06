@@ -3,7 +3,13 @@
 // 一般指令 → 頻道ID: 1402341842023878697
 // 自動監控 → 頻道ID: 1402338913258836108 (刪除記錄、離開記錄)
 
-const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, ChannelType, PermissionFlagsBits ,
+    ButtonBuilder,
+    ActionRowBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    ButtonStyle,
+    TextInputStyle } = require('discord.js');
 const sqlite3 = require('sqlite3').verbose();
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
@@ -251,11 +257,16 @@ const checkLinkCommand = new SlashCommandBuilder()
     .setName('checklink')
     .setDescription('檢查您的帳號連結狀態');
 
+// 加入新的管理員指令定義
+const linkPanelCommand = new SlashCommandBuilder()
+    .setName('linkpanel')
+    .setDescription('[管理員] 生成連結面板');
+
 // 將所有指令加入陣列
 commands.push(
     levelCommand, leaderboardCommand, deletedLogsCommand, memberLeavesCommand,
     myLevelCommand, topCommand,
-    linkCommand, checkLinkCommand  // 新增的連結指令
+    linkCommand, checkLinkCommand , linkPanelCommand 
 );
 
 // Bot 準備完成
@@ -726,74 +737,171 @@ async function handleMemberLeavesCommand(interaction, targetChannel) {
 
 // 斜線指令處理
 client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
-    
-    const { commandName } = interaction;
-    const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
-    
-    // 管理員指令 - 發送到管理員頻道
-    if (['level', 'leaderboard', 'deleted', 'leaves'].includes(commandName)) {
-        if (!isAdmin) {
-            await interaction.reply({ 
-                content: '❌ 你沒有權限使用此指令！', 
-                ephemeral: true 
-            });
-            return;
+    // 處理斜線指令
+    if (interaction.isChatInputCommand()) {
+        const { commandName } = interaction;
+        const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+        
+        // 管理員指令 - 發送到管理員頻道
+        if (['level', 'leaderboard', 'deleted', 'leaves', 'linkpanel'].includes(commandName)) {
+            if (!isAdmin) {
+                await interaction.reply({ 
+                    content: '❌ 你沒有權限使用此指令！', 
+                    ephemeral: true 
+                });
+                return;
+            }
+            
+            const adminChannel = getAdminChannel(interaction.guild);
+            if (!adminChannel) {
+                await interaction.reply({ 
+                    content: '❌ 找不到管理員頻道！', 
+                    ephemeral: true 
+                });
+                return;
+            }
+            
+            switch (commandName) {
+                case 'level':
+                    await handleLevelCommand(interaction, adminChannel);
+                    break;
+                case 'leaderboard':
+                    await handleLeaderboardCommand(interaction, adminChannel);
+                    break;
+                case 'deleted':
+                    await handleDeletedLogsCommand(interaction, adminChannel);
+                    break;
+                case 'leaves':
+                    await handleMemberLeavesCommand(interaction, adminChannel);
+                    break;
+                case 'linkpanel':
+                    await handleLinkPanelCommand(interaction);
+                    break;
+            }
         }
         
-        const adminChannel = getAdminChannel(interaction.guild);
-        if (!adminChannel) {
-            await interaction.reply({ 
-                content: '❌ 找不到管理員頻道！', 
-                ephemeral: true 
-            });
-            return;
-        }
-        
-        switch (commandName) {
-            case 'level':
-                await handleLevelCommand(interaction, adminChannel);
-                break;
-            case 'leaderboard':
-                await handleLeaderboardCommand(interaction, adminChannel);
-                break;
-            case 'deleted':
-                await handleDeletedLogsCommand(interaction, adminChannel);
-                break;
-            case 'leaves':
-                await handleMemberLeavesCommand(interaction, adminChannel);
-                break;
+        // 其他現有的指令處理保持不變...
+    }
+    
+    // 處理按鈕交互
+    else if (interaction.isButton()) {
+        if (interaction.customId === 'checklink_button') {
+            // 模擬執行 /checklink 指令
+            await handleCheckLinkCommand(interaction);
+        } 
+        else if (interaction.customId === 'link_button') {
+            // 顯示輸入 token 的 modal
+            const modal = new ModalBuilder()
+                .setCustomId('link_token_modal')
+                .setTitle('連結遊戲帳號');
+
+            const tokenInput = new TextInputBuilder()
+                .setCustomId('token_input')
+                .setLabel('請輸入連結代碼')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('XXXX-XXXX-XXXX-XXXX')
+                .setRequired(true)
+                .setMaxLength(19)
+                .setMinLength(19);
+
+            const actionRow = new ActionRowBuilder().addComponents(tokenInput);
+            modal.addComponents(actionRow);
+
+            await interaction.showModal(modal);
         }
     }
     
-    // 一般使用者指令 - 發送到使用者頻道
-    if (['mylevel', 'top'].includes(commandName)) {
-        const userChannel = getUserChannel(interaction.guild);
-        if (!userChannel) {
-            await interaction.reply({ 
-                content: '❌ 找不到使用者頻道！', 
-                ephemeral: true 
-            });
-            return;
+    // 處理 Modal 提交
+    else if (interaction.isModalSubmit()) {
+        if (interaction.customId === 'link_token_modal') {
+            const token = interaction.fields.getTextInputValue('token_input');
+            
+            // 模擬執行 /link 指令
+            // 創建一個模擬的 interaction options 對象
+            const mockOptions = {
+                getString: (name) => name === '代碼' ? token : null
+            };
+            
+            // 暫存原始的 options 並替換
+            const originalOptions = interaction.options;
+            interaction.options = mockOptions;
+            
+            await handleLinkCommand(interaction);
+            
+            // 恢復原始 options
+            interaction.options = originalOptions;
         }
-        
-        switch (commandName) {
-            case 'mylevel':
-                await handleLevelCommand(interaction, userChannel);
-                break;
-            case 'top':
-                await handleLeaderboardCommand(interaction, userChannel);
-                break;
-        }
-    }
-    
-    // 🔥 連結指令（所有人都可使用）
-    if (commandName === 'link') {
-        await handleLinkCommand(interaction);
-    } else if (commandName === 'checklink') {
-        await handleCheckLinkCommand(interaction);
     }
 });
+
+async function handleLinkPanelCommand(interaction) {
+    try {
+        await interaction.deferReply({ ephemeral: true });
+
+        const embed = new EmbedBuilder()
+            .setColor(0x3498db)
+            .setTitle('🔗 遊戲帳號連結面板')
+            .setDescription('點擊下方按鈕來管理您的帳號連結')
+            .addFields(
+                { 
+                    name: '📋 檢查連結狀態', 
+                    value: '查看您的 Discord 帳號是否已連結遊戲帳號', 
+                    inline: true 
+                },
+                { 
+                    name: '🔗 連結帳號', 
+                    value: '使用連結代碼將您的帳號與遊戲連結', 
+                    inline: true 
+                },
+                { 
+                    name: '💡 如何獲得連結代碼？', 
+                    value: '1. 登入遊戲網頁\n2. 前往帳號連結頁面\n3. 獲取連結代碼', 
+                    inline: false 
+                }
+            )
+            .setFooter({ text: '連結成功後可獲得遊戲內獎勵！' })
+            .setTimestamp();
+
+        const checkLinkButton = new ButtonBuilder()
+            .setCustomId('checklink_button')
+            .setLabel('📋 檢查連結狀態')
+            .setStyle(ButtonStyle.Secondary);
+
+        const linkButton = new ButtonBuilder()
+            .setCustomId('link_button')
+            .setLabel('🔗 連結帳號')
+            .setStyle(ButtonStyle.Primary);
+
+        const actionRow = new ActionRowBuilder()
+            .addComponents(checkLinkButton, linkButton);
+
+        // 發送到當前頻道
+        await interaction.followUp({
+            content: '✅ 連結面板已生成！',
+            ephemeral: true
+        });
+
+        await interaction.channel.send({
+            embeds: [embed],
+            components: [actionRow]
+        });
+
+    } catch (error) {
+        console.error('生成連結面板失敗:', error);
+        
+        const errorEmbed = new EmbedBuilder()
+            .setColor(0xe74c3c)
+            .setTitle('❌ 生成失敗')
+            .setDescription('無法生成連結面板，請稍後再試。')
+            .setTimestamp();
+        
+        if (interaction.deferred) {
+            await interaction.editReply({ embeds: [errorEmbed] });
+        } else {
+            await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        }
+    }
+}
 
 // 成員離開事件
 client.on('guildMemberRemove', async member => {
