@@ -9,7 +9,9 @@ const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, ChannelTyp
     ModalBuilder,
     TextInputBuilder,
     ButtonStyle,
-    TextInputStyle } = require('discord.js');
+    TextInputStyle,
+    AttachmentBuilder
+      } = require('discord.js');
 const sqlite3 = require('sqlite3').verbose();
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
@@ -838,27 +840,19 @@ async function handleLinkPanelCommand(interaction) {
     try {
         await interaction.deferReply({ ephemeral: true });
 
+        // 創建圖片附件
+        const attachment = new AttachmentBuilder('./Discord_Connect.jpg', { 
+            name: 'discord_connect.jpg' 
+        });
+
         const embed = new EmbedBuilder()
             .setColor(0x3498db)
-            .setTitle('🔗 SFL 遊戲帳號連結')
+            .setTitle('🔗 遊戲帳號連結面板')
             .setDescription('點擊下方按鈕來管理您的帳號連結')
             .addFields(
-                { 
-                    name: '📋 檢查連結狀態', 
-                    value: '查看 Discord 帳號是否已連結遊戲帳號', 
-                    inline: true 
-                },
-                { 
-                    name: '🔗 連結帳號', 
-                    value: '使用連結代碼將您的帳號與遊戲連結', 
-                    inline: true 
-                },
-                { 
-                    name: '💡 如何獲得連結代碼？', 
-                    value: '1. 前往 [SFL遊戲網頁](https://sfl-rpg.com/)\n2. 在主頁資源管理區塊點選【帳號連結頁面】\n3. 複製連結代碼\n4. 使用下方連結按紐 或 /link 代碼 指令', 
-                    inline: false 
-                }
+                { name: '📝 如何連結？', value: '1. 前往 [SFL遊戲網頁](https://sfl-rpg.com/)\n2. 在主頁資源管理區塊點選【帳號連結頁面】\n3. 複製連結代碼\n4. 使用下方連結按紐 或 `/link 代碼` 指令' }
             )
+            .setImage('attachment://discord_connect.jpg')  // 添加圖片
             .setFooter({ text: '連結成功後可獲得遊戲內獎勵！' })
             .setTimestamp();
 
@@ -870,7 +864,7 @@ async function handleLinkPanelCommand(interaction) {
         const linkButton = new ButtonBuilder()
             .setCustomId('link_button')
             .setLabel('🔗 連結帳號')
-            .setStyle(ButtonStyle.Success);
+            .setStyle(ButtonStyle.Success);  // 綠色按鈕
 
         const actionRow = new ActionRowBuilder()
             .addComponents(checkLinkButton, linkButton);
@@ -883,7 +877,8 @@ async function handleLinkPanelCommand(interaction) {
 
         await interaction.channel.send({
             embeds: [embed],
-            components: [actionRow]
+            components: [actionRow],
+            files: [attachment]  // 附加圖片檔案
         });
 
     } catch (error) {
