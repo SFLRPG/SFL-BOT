@@ -17,7 +17,8 @@ const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, ChannelTyp
     TextInputBuilder,
     ButtonStyle,
     TextInputStyle,
-    AttachmentBuilder
+    AttachmentBuilder,
+    StringSelectMenuBuilder
       } = require('discord.js');
 const sqlite3 = require('sqlite3').verbose();
 if (process.env.NODE_ENV !== 'production') {
@@ -953,5 +954,4 @@ console.log('🎫 票務系統已載入');
 console.log('📋 可用的票務指令：');
 console.log('  ✅ /ticket - 建立問題單');
 console.log('  ✅ /ticketstats - 查看統計 (管理員)');
-console.log('  ✅ /testgist - 測試連線 (管理員)');
 
