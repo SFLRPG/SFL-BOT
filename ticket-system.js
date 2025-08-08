@@ -12,6 +12,9 @@ try {
     process.exit(1);
 }
 
+console.log('  - GITHUB_TOKEN:', process.env.GITHUB_TOKEN ? '✅' : '❌');
+console.log('  - GIST_ID:', process.env.GIST_ID ? '✅' : '❌');
+
 class TicketSystem {
     constructor(config = {}) {
         // 預設設定，可以在初始化時覆寫
