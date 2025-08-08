@@ -275,7 +275,8 @@ const ticketCommands = ticketSystem.getCommands();
 commands.push(
     levelCommand, leaderboardCommand, deletedLogsCommand, memberLeavesCommand,
     myLevelCommand, topCommand,
-    linkCommand, checkLinkCommand , linkPanelCommand, ticketCommands
+    linkCommand, checkLinkCommand, linkPanelCommand,
+    ...ticketCommands
 );
 
 // Bot 準備完成
