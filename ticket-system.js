@@ -11,7 +11,8 @@ const {
     ButtonStyle,
     ModalBuilder,     
     TextInputBuilder,
-    TextInputStyle 
+    TextInputStyle,
+    StringSelectMenuBuilder
 } = require('discord.js');
 
 // 檢查並安裝 node-fetch (如果未安裝)
@@ -101,8 +102,10 @@ class TicketSystem {
             return await this.handleSlashCommand(interaction, getAdminChannelFunc);
         } else if (interaction.isButton()) {
             return await this.handleButtonInteraction(interaction, getAdminChannelFunc);
-        } else if (interaction.isModalSubmit()) {  
+        } else if (interaction.isModalSubmit()) {
             return await this.handleModalSubmit(interaction, getAdminChannelFunc);
+        } else if (interaction.isStringSelectMenu()) {  // 新增這個
+            return await this.handleSelectMenu(interaction);
         }
         return false;
     }
@@ -144,7 +147,7 @@ class TicketSystem {
         return false;
     }
 
-    // 🆕 處理票務面板指令
+    // 處理票務面板指令
     async handleTicketPanelCommand(interaction) {
         try {
             await interaction.deferReply({ ephemeral: true });
@@ -152,7 +155,7 @@ class TicketSystem {
             const embed = new EmbedBuilder()
                 .setColor(0x5865F2)
                 .setTitle('🎫 問題單系統')
-                .setDescription('遇到問題或需要協助嗎？點擊下方按鈕開立問題單，我們的團隊將盡快為您處理。')
+                .setDescription('遇到問題或需要協助嗎？請選擇問題類型開立問題單，我們的團隊將盡快為您處理。')
                 .addFields(
                     { 
                         name: '📋 開立前請注意', 
@@ -166,12 +169,38 @@ class TicketSystem {
                 .setFooter({ text: 'SFL 客服團隊' })
                 .setTimestamp();
     
-            const openTicketButton = new ButtonBuilder()
-                .setCustomId('open_ticket_modal')
-                .setLabel('🎫 開立問題單')
-                .setStyle(ButtonStyle.Primary);
+            // 改用下拉選單而不是按鈕
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId('ticket_type_select')
+                .setPlaceholder('🎫 選擇問題類型來開立問題單')
+                .addOptions([
+                    {
+                        label: 'Bug 回報',
+                        description: '遊戲錯誤或異常狀況',
+                        value: 'bug',
+                        emoji: '🐛'
+                    },
+                    {
+                        label: '功能建議',
+                        description: '新功能或改進建議',
+                        value: 'feature',
+                        emoji: '💡'
+                    },
+                    {
+                        label: '一般問題',
+                        description: '一般詢問或協助',
+                        value: 'general',
+                        emoji: '❓'
+                    },
+                    {
+                        label: '緊急問題',
+                        description: '需要立即處理的問題',
+                        value: 'urgent',
+                        emoji: '⚠️'
+                    }
+                ]);
     
-            const row = new ActionRowBuilder().addComponents(openTicketButton);
+            const row = new ActionRowBuilder().addComponents(selectMenu);
     
             // 發送到當前頻道
             await interaction.channel.send({
@@ -186,25 +215,43 @@ class TicketSystem {
             await interaction.editReply({ content: '❌ 生成票務面板失敗！' });
         }
     }
+
+    // 處理下拉選單選擇
+    async handleSelectMenu(interaction) {
+        if (interaction.customId === 'ticket_type_select') {
+            const selectedType = interaction.values[0];
+            
+            // 將選擇的類型暫存
+            const modal = new ModalBuilder()
+                .setCustomId(`ticket_modal_${selectedType}`)  // 包含類型在 ID 中
+                .setTitle('開立問題單');
     
-    // 🆕 處理 Modal 提交
+            const descriptionInput = new TextInputBuilder()
+                .setCustomId('ticket_description')
+                .setLabel('問題描述')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('請詳細描述您遇到的問題...')
+                .setRequired(true)
+                .setMinLength(10)
+                .setMaxLength(1000);
+    
+            const actionRow = new ActionRowBuilder().addComponents(descriptionInput);
+            modal.addComponents(actionRow);
+    
+            await interaction.showModal(modal);
+            return true;
+        }
+        return false;
+    }
+    
+    // 處理 Modal 提交
     async handleModalSubmit(interaction, getAdminChannelFunc) {
-        if (interaction.customId === 'ticket_modal') {
-            const ticketType = interaction.fields.getTextInputValue('ticket_type').toLowerCase();
+        if (interaction.customId.startsWith('ticket_modal_')) {
+            // 從 customId 中提取類型
+            const ticketType = interaction.customId.split('_')[2];
             const ticketDescription = interaction.fields.getTextInputValue('ticket_description');
     
-            // 驗證類型
-            const validTypes = ['bug', 'feature', 'general', 'urgent'];
-            if (!validTypes.includes(ticketType)) {
-                await interaction.reply({ 
-                    content: '❌ 無效的問題類型！請輸入: bug / feature / general / urgent', 
-                    ephemeral: true 
-                });
-                return true;
-            }
-    
             // 使用現有的建立問題單邏輯
-            // 暫時創建模擬的 options 物件
             const mockOptions = {
                 getString: (name) => {
                     if (name === '問題描述') return ticketDescription;
@@ -213,14 +260,11 @@ class TicketSystem {
                 }
             };
     
-            // 替換 interaction.options
             const originalOptions = interaction.options;
             interaction.options = mockOptions;
             
-            // 呼叫原本的 handleTicketCommand
             await this.handleTicketCommand(interaction, getAdminChannelFunc);
             
-            // 恢復原始 options
             interaction.options = originalOptions;
             
             return true;
