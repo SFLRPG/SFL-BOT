@@ -79,14 +79,9 @@ class TicketSystem {
             .setName('ticketstats')
             .setDescription('[管理員] 查看問題單統計');
 
-        const testGistCommand = new SlashCommandBuilder()
-            .setName('testgist')
-            .setDescription('[管理員] 測試 GitHub Gist 連線');
-
         return {
             ticket: ticketCommand,
             ticketstats: ticketStatsCommand,
-            testgist: testGistCommand,
             ticketpanel: ticketPanelCommand
         };
     }
@@ -127,14 +122,7 @@ class TicketSystem {
                 }
                 await this.handleTicketStatsCommand(interaction);
                 return true;
-                
-            case 'testgist':
-                if (!isAdmin) {
-                    await interaction.reply({ content: '❌ 管理員專用！', ephemeral: true });
-                    return true;
-                }
-                await this.handleTestGistCommand(interaction);
-                return true;
+
             case 'ticketpanel':
                 if (!isAdmin) {
                     await interaction.reply({ content: '❌ 你沒有權限使用此指令！', ephemeral: true });
@@ -557,22 +545,6 @@ class TicketSystem {
         } catch (error) {
             console.error('取得問題單統計失敗:', error);
             await interaction.editReply({ content: '❌ 取得統計資料失敗！' });
-        }
-    }
-
-    // 測試連線指令處理
-    async handleTestGistCommand(interaction) {
-        await interaction.deferReply({ ephemeral: true });
-        
-        try {
-            const data = await this.gistManager.readTicketData();
-            await interaction.editReply({
-                content: `✅ Gist 連線成功！\n📊 目前有 ${data.tickets.length} 個問題單記錄\n🕒 最後更新: ${new Date(data.lastUpdated).toLocaleString('zh-TW')}`
-            });
-        } catch (error) {
-            await interaction.editReply({
-                content: `❌ Gist 連線失敗：${error.message}\n\n請檢查：\n- GITHUB_TOKEN 環境變數\n- GIST_ID 環境變數\n- GitHub Token 權限`
-            });
         }
     }
 }
