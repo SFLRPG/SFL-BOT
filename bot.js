@@ -2,6 +2,13 @@
 // 管理員指令 → 頻道ID: 1402338913258836108
 // 一般指令 → 頻道ID: 1402341842023878697
 // 自動監控 → 頻道ID: 1402338913258836108 (刪除記錄、離開記錄)
+const TicketSystem = require('./ticket-system'); // 引入我們建立的票務模塊
+
+// 初始化票務系統（可以自訂設定）
+const ticketSystem = new TicketSystem({
+    categoryId: '1403304528509407282',    // 您想要的問題單類別ID
+    adminChannelId: '1402338913258836108' // 管理員通知頻道ID
+});
 
 const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, ChannelType, PermissionFlagsBits ,
     ButtonBuilder,
@@ -263,12 +270,12 @@ const checkLinkCommand = new SlashCommandBuilder()
 const linkPanelCommand = new SlashCommandBuilder()
     .setName('linkpanel')
     .setDescription('[管理員] 生成連結面板');
-
+const ticketCommands = ticketSystem.getCommands();
 // 將所有指令加入陣列
 commands.push(
     levelCommand, leaderboardCommand, deletedLogsCommand, memberLeavesCommand,
     myLevelCommand, topCommand,
-    linkCommand, checkLinkCommand , linkPanelCommand 
+    linkCommand, checkLinkCommand , linkPanelCommand, ticketCommands
 );
 
 // Bot 準備完成
@@ -683,6 +690,11 @@ async function handleMemberLeavesCommand(interaction, targetChannel) {
 
 // 斜線指令處理
 client.on('interactionCreate', async interaction => {
+    const handled = await ticketSystem.handleInteraction(interaction, getAdminChannel);
+    
+    if (handled) {
+        return; // 如果票務系統已處理，就不繼續執行原本的程式碼
+    }
     // 處理斜線指令
     if (interaction.isChatInputCommand()) {
         const { commandName } = interaction;
@@ -936,3 +948,9 @@ console.log('  ✅ 自動監控（訊息刪除、成員離開）');
 console.log('  ✅ Discord 帳號連結');
 console.log('  ✅ 管理員指令');
 console.log('  ✅ 一般使用者指令');
+console.log('🎫 票務系統已載入');
+console.log('📋 可用的票務指令：');
+console.log('  ✅ /ticket - 建立問題單');
+console.log('  ✅ /ticketstats - 查看統計 (管理員)');
+console.log('  ✅ /testgist - 測試連線 (管理員)');
+
