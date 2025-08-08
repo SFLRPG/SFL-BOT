@@ -68,7 +68,7 @@ class TicketSystem {
                     .setDescription('問題類型')
                     .setRequired(true)
                     .addChoices(
-                        { name: '🐛 Bug回報', value: 'bug' },
+                        { name: '🐛 BUG回報', value: 'bug' },
                         { name: '💡 功能建議', value: 'feature' },
                         { name: '❓ 一般問題', value: 'general' },
                         { name: '⚠️ 緊急問題', value: 'urgent' }
@@ -142,8 +142,8 @@ class TicketSystem {
     
             const embed = new EmbedBuilder()
                 .setColor(0x5865F2)
-                .setTitle('🎫 問題單系統')
-                .setDescription('遇到問題或需要協助嗎？請選擇問題類型開立問題單，我們的團隊將盡快為您處理。')
+                .setTitle('🎫 客服系統')
+                .setDescription('遇到問題或需要協助嗎？請選擇問題類型開立問題單，SFL 客服團隊將盡快為您處理。')
                 .addFields(
                     { 
                         name: '📋 開立前請注意', 
@@ -151,7 +151,7 @@ class TicketSystem {
                     },
                     { 
                         name: '⏰ 處理時間', 
-                        value: '一般問題：24 小時內\n緊急問題：2 小時內' 
+                        value: 'SFL 客服團隊會在看到您的問題後進行回覆。' 
                     }
                 )
                 .setFooter({ text: 'SFL 客服團隊' })
@@ -163,7 +163,7 @@ class TicketSystem {
                 .setPlaceholder('🎫 選擇問題類型來開立問題單')
                 .addOptions([
                     {
-                        label: 'Bug 回報',
+                        label: 'BUG 回報',
                         description: '遊戲錯誤或異常狀況',
                         value: 'bug',
                         emoji: '🐛'
@@ -438,7 +438,7 @@ class TicketSystem {
             const welcomeEmbed = new EmbedBuilder()
                 .setColor(0x2ecc71)
                 .setTitle(`${typeEmojis[ticketType]} 問題單 #${ticketId}`)
-                .setDescription('感謝您建立問題單！管理員將會盡快回覆您。')
+                .setDescription('已為您建立問題單！ SFL客服團隊 將會盡快回覆您。請不要催促。在等待期間時，可以於此頻道補充說明。')
                 .addFields(
                     { name: '👤 建立者', value: `<@${user.id}>`, inline: true },
                     { name: '📋 問題類型', value: ticketType, inline: true },
