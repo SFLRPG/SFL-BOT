@@ -167,7 +167,7 @@ class TicketSystem {
         const guild = interaction.guild;
         
         try {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: 64 });
             
             // 檢查 GitHub 設定
             if (!this.config.GITHUB_TOKEN || !this.config.GIST_ID) {
@@ -480,11 +480,19 @@ class GitHubGistManager {
 
     async getUserOpenTickets(userId) {
         const data = await this.readTicketData();
+        // 確保 data.tickets 存在且為陣列
+        if (!data || !data.tickets || !Array.isArray(data.tickets)) {
+            return 0;
+        }
         return data.tickets.filter(t => t.user_id === userId && t.status === 'open').length;
     }
 
     async getTicketByChannelId(channelId) {
         const data = await this.readTicketData();
+        // 確保 data.tickets 存在且為陣列
+        if (!data || !data.tickets || !Array.isArray(data.tickets)) {
+            return null;
+        }
         return data.tickets.find(t => t.channel_id === channelId);
     }
 }
