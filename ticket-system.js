@@ -449,7 +449,7 @@ class TicketSystem {
                 .setTimestamp();
             
             await ticketChannel.send({
-                content: `<@${user.id}> 歡迎來到您的問題單！`,
+                content: `<@${user.id}> 歡迎來到您的問題單！請盡量補充說明，最好能夠附上圖片。`,
                 embeds: [welcomeEmbed],
                 components: [row]
             });
