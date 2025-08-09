@@ -163,7 +163,6 @@ function initDatabase() {
             guild_id TEXT
         )`);
         
-        // 🔥 新增 Discord 連結資料表
         db.run(`CREATE TABLE IF NOT EXISTS discord_links (
             discord_id TEXT PRIMARY KEY,
             discord_username TEXT,
@@ -333,6 +332,36 @@ client.on('messageDelete', async message => {
             await adminChannel.send({ embeds: [embed] });
         } catch (error) {
             console.error('發送刪除記錄失敗:', error);
+        }
+    }
+});
+
+// 訊息編輯事件
+client.on('messageUpdate', async (oldMessage, newMessage) => {
+    // 忽略機器人訊息和無內容變更
+    if (!newMessage.guild || newMessage.author?.bot) return;
+    if (oldMessage.content === newMessage.content) return;
+
+    // 自動發送到管理員頻道
+    const adminChannel = getAdminChannel(newMessage.guild);
+    if (adminChannel && oldMessage.content) {
+        const embed = new EmbedBuilder()
+            .setColor(0xf39c12)
+            .setTitle('✏️ 即時監控：訊息編輯')
+            .setURL(newMessage.url)
+            .addFields(
+                { name: '👤 用戶', value: `${newMessage.author?.username || '未知'}`, inline: true },
+                { name: '📍 頻道', value: `<#${newMessage.channel.id}>`, inline: true },
+                { name: '🕒 時間', value: formatDate(Date.now()), inline: true },
+                { name: '📝 原始內容', value: oldMessage.content.substring(0, 1024) || '(無內容)', inline: false },
+                { name: '📝 新內容', value: newMessage.content.substring(0, 1024) || '(無內容)', inline: false }
+            )
+            .setFooter({ text: '點擊標題可跳轉至該訊息' });
+        
+        try {
+            await adminChannel.send({ embeds: [embed] });
+        } catch (error) {
+            console.error('發送編輯記錄失敗:', error);
         }
     }
 });
