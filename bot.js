@@ -498,7 +498,7 @@ async function handleCheckLinkCommand(interaction) {
                 .setTitle('🔍 連結狀態')
                 .setDescription('您的 Discord 帳號尚未連結遊戲帳號。')
                 .addFields(
-                    { name: '📝 如何連結？', value: '1. 前往 [SFL遊戲網頁](https://sfl-rpg.com/)\n2. 在主頁資源管理區塊點選【Discord綁定】頁面\n3. 複製連結代碼\n4. 使用下方連結按紐 或 `/link 代碼` 指令' }
+                    { name: '📝 如何連結？', value: '1. 前往 [SFL遊戲網頁](https://sfl-rpg.com/)\n2. 在主頁點選【Discord綁定】頁面\n3. 複製連結代碼\n4. 使用下方連結按紐 或 `/link 代碼` 指令' }
                 )
                 .setFooter({ text: '完成連結可獲得獎勵！' })
                 .setTimestamp();
@@ -808,7 +808,7 @@ async function handleLinkPanelCommand(interaction) {
             .setTitle('🔗 遊戲帳號連結面板')
             .setDescription('點擊下方按鈕來管理您的帳號連結')
             .addFields(
-                { name: '📝 如何連結？', value: '1. 前往 [SFL遊戲網頁](https://sfl-rpg.com/)\n2. 在主頁資源管理區塊點選【Discord連結】頁面\n3. 複製連結代碼\n4. 使用下方連結按紐 或 `/link 代碼` 指令' }
+                { name: '📝 如何連結？', value: '1. 前往 [SFL遊戲網頁](https://sfl-rpg.com/)\n2. 在主頁點選【Discord連結】頁面\n3. 複製連結代碼\n4. 使用下方連結按紐 或 `/link 代碼` 指令' }
             )
             .setImage('attachment://discord_connect.jpg')  // 添加圖片
             .setFooter({ text: '連結成功後可獲得遊戲內獎勵！' })
