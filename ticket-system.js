@@ -218,7 +218,7 @@ class TicketSystem {
                 .setCustomId('ticket_description')
                 .setLabel('問題描述')
                 .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder('請詳細描述您遇到的問題...')
+                .setPlaceholder('請詳細描述您遇到的問題...，並請附上你的遊戲登入用信箱。')
                 .setRequired(true)
                 .setMinLength(10)
                 .setMaxLength(1000);
@@ -438,7 +438,7 @@ class TicketSystem {
             const welcomeEmbed = new EmbedBuilder()
                 .setColor(0x2ecc71)
                 .setTitle(`${typeEmojis[ticketType]} 問題單 #${ticketId}`)
-                .setDescription('已為您建立問題單！ SFL客服團隊 將會盡快回覆您。請不要催促。在等待期間時，可以於此頻道補充說明。')
+                .setDescription('已為您建立問題單！ SFL客服團隊 將會盡快回覆您。請不要催促。在等待期間時，可以於此頻道補充說明。若未告知您的遊戲信箱，請直接在此頻道輸入。')
                 .addFields(
                     { name: '👤 建立者', value: `<@${user.id}>`, inline: true },
                     { name: '📋 問題類型', value: ticketType, inline: true },
