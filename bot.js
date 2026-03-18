@@ -142,6 +142,18 @@ function getUserChannel(guild) {
     return guild.channels.cache.get(CONFIG.USER_CHANNEL_ID);
 }
 
+async function updateMemberCountChannel(guild) {
+    const MEMBER_COUNT_CHANNEL_ID = '1483867901504262396';
+    try {
+        const channel = await guild.channels.fetch(MEMBER_COUNT_CHANNEL_ID);
+        if (channel) {
+            await channel.setName(`伺服器成員： ${guild.memberCount}`);
+        }
+    } catch (error) {
+        console.error('❌ 更新成員人數頻道失敗:', error);
+    }
+}
+
 // ========== 指令定義 ==========
 const levelCommand = new SlashCommandBuilder()
     .setName('level').setDescription('[管理員] 查看等級資訊')
@@ -509,10 +521,15 @@ client.on('interactionCreate', async interaction => {
 });
 
 // ========== 成員事件 ==========
+
 client.on('guildMemberRemove', async member => {
     const roles = member.roles.cache.filter(r => r.name !== '@everyone').map(r => r.name).join(', ');
     db.run(`INSERT INTO member_leaves (user_id, username, discriminator, join_date, leave_date, roles, guild_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [member.id, member.user.username, member.user.discriminator, member.joinedTimestamp, Date.now(), roles, member.guild.id]);
+
+    // 🆕 更新成員人數頻道
+    await updateMemberCountChannel(member.guild);
+
     const adminChannel = getAdminChannel(member.guild);
     if (adminChannel) {
         const joinDuration = member.joinedTimestamp ? `${Math.floor((Date.now() - member.joinedTimestamp) / (1000 * 60 * 60 * 24))} 天` : '未知';
@@ -528,6 +545,10 @@ client.on('guildMemberRemove', async member => {
 client.on('guildMemberAdd', async member => {
     db.run(`INSERT OR REPLACE INTO user_levels (user_id, username, xp, level, messages_count, last_message_time, join_date, guild_id) VALUES (?, ?, 0, 1, 0, 0, ?, ?)`,
         [member.id, member.user.username, Date.now(), member.guild.id]);
+
+    // 🆕 更新成員人數頻道
+    await updateMemberCountChannel(member.guild);
+
     const adminChannel = getAdminChannel(member.guild);
     if (adminChannel) {
         const embed = new EmbedBuilder().setColor(0x2ecc71).setTitle('🎉 即時監控：新成員加入').setThumbnail(member.user.displayAvatarURL())
