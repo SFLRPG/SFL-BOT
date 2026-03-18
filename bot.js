@@ -143,7 +143,7 @@ function getUserChannel(guild) {
 }
 
 async function updateMemberCountChannel(guild) {
-    const MEMBER_COUNT_CHANNEL_ID = '1483867901504262396';
+    const MEMBER_COUNT_CHANNEL_ID = '1483868624031584306';
     try {
         const channel = await guild.channels.fetch(MEMBER_COUNT_CHANNEL_ID);
         if (channel) {
