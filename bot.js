@@ -3,6 +3,7 @@
 // 一般指令 → 頻道ID: 1402341842023878697
 // 自動監控 → 頻道ID: 1402338913258836108 (刪除記錄、離開記錄)
 const TicketSystem = require('./ticket-system');
+const RaffleSystem = require('./raffle-system');
 
 const ticketSystem = new TicketSystem({
     categoryId: '1403304528509407282',
@@ -82,6 +83,12 @@ const client = new Client({
 });
 
 const db = new sqlite3.Database('./sfl_bot.db');
+
+const raffleSystem = new RaffleSystem({
+    adminChannelId: '1402338913258836108',
+    firestore,
+    db
+});
 
 const CONFIG = {
     XP_PER_MESSAGE: 15,
@@ -189,6 +196,7 @@ const actCommand = new SlashCommandBuilder()
     .addStringOption(option => option.setName('假名稱').setDescription('自訂顯示名稱').setRequired(false));
 
 const ticketCommands = ticketSystem.getCommands();
+const raffleCommands = raffleSystem.getCommands();
 
 const commands = [];
 commands.push(
@@ -196,13 +204,15 @@ commands.push(
     myLevelCommand, topCommand,
     linkCommand, checkLinkCommand, linkPanelCommand,
     actCommand,
-    ...ticketCommands
+    ...ticketCommands,
+    ...raffleCommands
 );
 
 // ========== Bot 準備完成 ==========
 client.once('ready', async () => {
     console.log(`✅ ${client.user.tag} 已上線！`);
     initDatabase();
+    raffleSystem.init(client);
     try {
         await client.application.commands.set(commands);
         console.log('✅ 斜線指令已註冊');
@@ -475,6 +485,9 @@ client.on('interactionCreate', async interaction => {
     const handled = await ticketSystem.handleInteraction(interaction, getAdminChannel);
     if (handled) return;
 
+    const raffleHandled = await raffleSystem.handleInteraction(interaction);
+    if (raffleHandled) return;
+
     if (interaction.isChatInputCommand()) {
         const { commandName } = interaction;
         const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
@@ -574,3 +587,4 @@ console.log('  ✅ Discord 帳號連結');
 console.log('  ✅ 管理員指令 (含 /act)');
 console.log('  ✅ 一般使用者指令');
 console.log('🎫 票務系統已載入');
+console.log('🎁 抽獎系統已載入');
