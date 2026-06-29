@@ -219,7 +219,7 @@ class RaffleSystem {
                 const publicEmbed = new EmbedBuilder()
                     .setColor(0xf1c40f)
                     .setTitle(`[結果公布] ${row.prize} x ${row.quantity}`)
-                    .setDescription(`**🏆 中獎者：**\n${winnerLines}\n\n📬 **中獎獎勵將在一週內透過信箱發送**`)
+                    .setDescription(`**🏆 中獎者：**\n${winnerLines}\n\n📬 **中獎獎勵將在一週內透過信箱發送**\n獎品將在發信後一週內過期，未領取將視為放棄`)
                     .setTimestamp();
                 await channel.send({ content: mentions, embeds: [publicEmbed] });
 
