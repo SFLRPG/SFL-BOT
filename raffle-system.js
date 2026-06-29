@@ -152,7 +152,7 @@ class RaffleSystem {
         const embed = new EmbedBuilder()
             .setColor(0xf1c40f)
             .setTitle(`[抽獎] ${prize} x ${quantity}`)
-            .setDescription(`**中獎名額：** ${winnerCount} 人\n\n按下 ${emoji} 即可參加！`)
+            .setDescription(`**中獎名額：** ${winnerCount} 人\n\n按下 ${emoji} 即可參加！\n\n⚠️ 參加抽獎前，請務必先前往 <#1404808567885795358> 連結 Discord 帳號才可進行抽獎。未連結中獎將視為棄權。`)
             .addFields({ name: '⏰ 結束時間', value: this.formatEndTime(endTime), inline: false })
             .setFooter({ text: `主辦：${hostName}` })
             .setTimestamp();
@@ -213,10 +213,13 @@ class RaffleSystem {
                 })));
 
                 const mentions = winners.map(u => `<@${u.id}>`).join(' ');
+                const winnerLines = winnerInfos
+                    .map(w => w.email ? `<@${w.user.id}>` : `<@${w.user.id}> (棄權/未連結帳號)`)
+                    .join('\n');
                 const publicEmbed = new EmbedBuilder()
                     .setColor(0xf1c40f)
                     .setTitle(`[結果公布] ${row.prize} x ${row.quantity}`)
-                    .setDescription(`**🏆 中獎者：**\n${mentions}\n\n📬 **中獎獎勵將在一週內透過信箱發送**`)
+                    .setDescription(`**🏆 中獎者：**\n${winnerLines}\n\n📬 **中獎獎勵將在一週內透過信箱發送**`)
                     .setTimestamp();
                 await channel.send({ content: mentions, embeds: [publicEmbed] });
 
