@@ -52,6 +52,14 @@ class RaffleSystem {
         this.resumePending();
     }
 
+    formatEndTime(ts) {
+        return new Date(ts).toLocaleString('zh-TW', {
+            timeZone: 'Asia/Taipei',
+            year: 'numeric', month: 'long', day: 'numeric',
+            hour: '2-digit', minute: '2-digit', hour12: false
+        });
+    }
+
     // 支援 m(分) / h(時) / d(天)，回傳毫秒；格式錯誤回傳 null
     parseDuration(str) {
         const m = String(str).trim().toLowerCase().match(/^(\d+)\s*(m|h|d)$/);
@@ -139,18 +147,25 @@ class RaffleSystem {
         }
 
         const endTime = Date.now() + durationMs;
-        const endSec = Math.floor(endTime / 1000);
+        const hostName = interaction.member?.displayName || interaction.user.username;
 
         const embed = new EmbedBuilder()
             .setColor(0xf1c40f)
-            .setTitle('🎉 抽獎開始！')
-            .setDescription(`**獎勵：** ${prize} ×${quantity}\n**中獎名額：** ${winnerCount} 人\n\n按下 ${emoji} 即可參加！`)
-            .addFields({ name: '⏰ 結束時間', value: `<t:${endSec}:F>（<t:${endSec}:R>）`, inline: false })
-            .setFooter({ text: `主辦：${interaction.user.username}` })
+            .setTitle(`[抽獎] ${prize} x ${quantity}`)
+            .setDescription(`**中獎名額：** ${winnerCount} 人\n\n按下 ${emoji} 即可參加！`)
+            .addFields({ name: '⏰ 結束時間', value: this.formatEndTime(endTime), inline: false })
+            .setFooter({ text: `主辦：${hostName}` })
             .setTimestamp();
 
         await interaction.reply({ content: '✅ 抽獎已開始！', ephemeral: true });
-        const message = await interaction.channel.send({ embeds: [embed] });
+
+        const notifyRole = interaction.guild.roles.cache.find(r => r.name === '抽獎通知');
+        const sendOptions = { embeds: [embed] };
+        if (notifyRole) {
+            sendOptions.content = `<@&${notifyRole.id}>`;
+            sendOptions.allowedMentions = { roles: [notifyRole.id] };
+        }
+        const message = await interaction.channel.send(sendOptions);
 
         try {
             await message.react(emoji);
@@ -184,8 +199,8 @@ class RaffleSystem {
                 if (winners.length === 0) {
                     const emptyEmbed = new EmbedBuilder()
                         .setColor(0x95a5a6)
-                        .setTitle('🎉 抽獎結束')
-                        .setDescription(`**獎勵：** ${row.prize} ×${row.quantity}\n\n本次抽獎沒有人參加，未產生中獎者。`)
+                        .setTitle(`[結果公布] ${row.prize} x ${row.quantity}`)
+                        .setDescription('本次抽獎沒有人參加，未產生中獎者。')
                         .setTimestamp();
                     await channel.send({ embeds: [emptyEmbed] });
                     await this.sendAdminResult(row, []);
@@ -200,8 +215,8 @@ class RaffleSystem {
                 const mentions = winners.map(u => `<@${u.id}>`).join(' ');
                 const publicEmbed = new EmbedBuilder()
                     .setColor(0xf1c40f)
-                    .setTitle('🎉 抽獎結果公布')
-                    .setDescription(`**獎勵：** ${row.prize} ×${row.quantity}\n\n**🏆 中獎者：**\n${mentions}\n\n📬 **中獎獎勵將在一週內透過信箱發送**`)
+                    .setTitle(`[結果公布] ${row.prize} x ${row.quantity}`)
+                    .setDescription(`**🏆 中獎者：**\n${mentions}\n\n📬 **中獎獎勵將在一週內透過信箱發送**`)
                     .setTimestamp();
                 await channel.send({ content: mentions, embeds: [publicEmbed] });
 
