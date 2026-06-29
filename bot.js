@@ -153,8 +153,10 @@ async function updateMemberCountChannel(guild) {
     const MEMBER_COUNT_CHANNEL_ID = '1483868624031584306';
     try {
         const channel = await guild.channels.fetch(MEMBER_COUNT_CHANNEL_ID);
-        if (channel) {
-            await channel.setName(`伺服器成員： ${guild.memberCount}`);
+        // 頻道改名有速率限制（每 10 分鐘 2 次），名稱沒變就不打 API
+        const targetName = `伺服器成員： ${guild.memberCount}`;
+        if (channel && channel.name !== targetName) {
+            await channel.setName(targetName);
         }
     } catch (error) {
         console.error('❌ 更新成員人數頻道失敗:', error);
@@ -243,6 +245,8 @@ client.on('messageDelete', async message => {
         if (attachments) embed.addFields({ name: '📎 附件', value: attachments.substring(0, 1024), inline: false });
         try { await adminChannel.send({ embeds: [embed] }); } catch (error) { console.error('發送刪除記錄失敗:', error); }
     }
+
+    await updateMemberCountChannel(message.guild);
 });
 
 client.on('messageUpdate', async (oldMessage, newMessage) => {
@@ -261,6 +265,8 @@ client.on('messageUpdate', async (oldMessage, newMessage) => {
             ).setFooter({ text: '點擊標題可跳轉至該訊息' });
         try { await adminChannel.send({ embeds: [embed] }); } catch (error) { console.error('發送編輯記錄失敗:', error); }
     }
+
+    await updateMemberCountChannel(newMessage.guild);
 });
 
 // ========== 指令處理函數 ==========
