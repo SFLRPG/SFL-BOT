@@ -234,7 +234,8 @@ class RaffleSystem {
         try {
             const adminChannel = await this.client.channels.fetch(this.adminChannelId);
             const list = winnerInfos.length
-                ? winnerInfos.map((w, i) => `${i + 1}. <@${w.user.id}>（${w.user.username}）\n${w.email || '(未綁定)'}`).join('\n\n')
+            ? winnerInfos.map((w, i) => `${i + 1}. <@${w.user.id}>（${w.user.username}）\n${w.email || '(未綁定)'}`).join('\n\n')
+            : '（本次無人參加）';
 
             const adminEmbed = new EmbedBuilder()
                 .setColor(0x9b59b6)
