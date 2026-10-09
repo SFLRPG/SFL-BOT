@@ -294,6 +294,21 @@ async function handleActCommand(interaction) {
     }
 }
 
+// 連結成功後賦予「封閉者」身分組（已有則略過）；失敗不影響連結結果
+async function grantLinkedRole(guild, discordId) {
+    try {
+        const role = guild.roles.cache.find(r => r.name === '封閉者');
+        if (!role) { console.warn('⚠️ 找不到「封閉者」身分組'); return; }
+        const member = await guild.members.fetch(discordId);
+        if (!member.roles.cache.has(role.id)) {
+            await member.roles.add(role, '完成遊戲帳號連結');
+            console.log(`✅ 已賦予 ${member.user.username} 封閉者身分組`);
+        }
+    } catch (error) {
+        console.error('賦予封閉者身分組失敗:', error);
+    }
+}
+
 async function handleLinkCommand(interaction) {
     if (!firestore) {
         await interaction.reply({ content: '❌ 連結功能暫時無法使用，請聯繫管理員。', ephemeral: true });
@@ -309,6 +324,7 @@ async function handleLinkCommand(interaction) {
         const existingLink = await firestore.collection('discordLink').where('discordId', '==', discordId).get();
         
         if (!existingLink.empty) {
+            await grantLinkedRole(interaction.guild, discordId);
             const embed = new EmbedBuilder().setColor(0xf39c12).setTitle('⚠️ 帳號已連結')
                 .setDescription('您的 Discord 帳號已經連結過遊戲帳號了！')
                 .setFooter({ text: '如需解除連結，請聯繫管理員' }).setTimestamp();
@@ -341,7 +357,9 @@ async function handleLinkCommand(interaction) {
         
         db.run(`INSERT OR REPLACE INTO discord_links (discord_id, discord_username, game_user_id, linked_at, guild_id) VALUES (?, ?, ?, ?, ?)`,
             [discordId, discordUsername, userId, Date.now(), guildId]);
-        
+
+        await grantLinkedRole(interaction.guild, discordId);
+
         const embed = new EmbedBuilder().setColor(0x2ecc71).setTitle('✅ 連結成功！')
             .setDescription('恭喜！您的 Discord 帳號已成功連結到遊戲帳號。')
             .addFields({ name: '🎁 連結獎勵', value: '已發送至您的遊戲信箱！', inline: true }, { name: '👤 Discord', value: `${discordUsername}`, inline: true })
