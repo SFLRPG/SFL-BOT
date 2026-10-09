@@ -294,15 +294,20 @@ async function handleActCommand(interaction) {
     }
 }
 
-// 連結成功後賦予「封閉者」身分組（已有則略過）；失敗不影響連結結果
+// 連結成功後賦予「封閉者」並移除「未連結帳號」身分組；失敗不影響連結結果
 async function grantLinkedRole(guild, discordId) {
     try {
-        const role = guild.roles.cache.find(r => r.name === '封閉者');
-        if (!role) { console.warn('⚠️ 找不到「封閉者」身分組'); return; }
         const member = await guild.members.fetch(discordId);
-        if (!member.roles.cache.has(role.id)) {
+        const role = guild.roles.cache.find(r => r.name === '封閉者');
+        if (!role) console.warn('⚠️ 找不到「封閉者」身分組');
+        else if (!member.roles.cache.has(role.id)) {
             await member.roles.add(role, '完成遊戲帳號連結');
             console.log(`✅ 已賦予 ${member.user.username} 封閉者身分組`);
+        }
+        const unlinkedRole = guild.roles.cache.find(r => r.name === '未連結帳號');
+        if (unlinkedRole && member.roles.cache.has(unlinkedRole.id)) {
+            await member.roles.remove(unlinkedRole, '完成遊戲帳號連結');
+            console.log(`✅ 已移除 ${member.user.username} 未連結帳號身分組`);
         }
     } catch (error) {
         console.error('賦予封閉者身分組失敗:', error);
