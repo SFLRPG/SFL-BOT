@@ -1,10 +1,12 @@
 // raffle-system.js - 獨立的抽獎系統模塊
 // 使用方法：在 bot.js 中引入 const RaffleSystem = require('./raffle-system');
 
-const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, EmbedBuilder, PermissionFlagsBits, AttachmentBuilder } = require('discord.js');
+const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, EmbedBuilder, PermissionFlagsBits, AttachmentBuilder,
+    ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 
 const MAX_TIMEOUT = 2147483647;
 const VIEW_REACTORS_NAME = '查看抽獎參加者';
+const FORCE_END_NAME = '強制結束抽獎';
 
 class RaffleSystem {
     constructor(config = {}) {
@@ -46,7 +48,11 @@ class RaffleSystem {
             .setName(VIEW_REACTORS_NAME)
             .setType(ApplicationCommandType.Message)
             .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
-        return [raffleCommand, viewReactorsCommand];
+        const forceEndCommand = new ContextMenuCommandBuilder()
+            .setName(FORCE_END_NAME)
+            .setType(ApplicationCommandType.Message)
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+        return [raffleCommand, viewReactorsCommand, forceEndCommand];
     }
 
     getCommands() {
@@ -201,9 +207,95 @@ class RaffleSystem {
         }
     }
 
+    // 重新部署後 DB 可能遺失，從抽獎訊息的 embed 反推資料
+    parseRaffleEmbed(message) {
+        const embed = message.embeds[0];
+        const title = embed?.title?.match(/^\[抽獎\]\s*(.+?)\s*x\s*(\d+)$/);
+        const count = embed?.description?.match(/中獎名額：\*\*\s*(\d+)/);
+        if (!title || !count) return null;
+        return { prize: title[1], quantity: parseInt(title[2], 10), winner_count: parseInt(count[1], 10) };
+    }
+
+    async handleForceEnd(interaction) {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            await interaction.reply({ content: '❌ 你沒有權限使用此指令！', ephemeral: true });
+            return;
+        }
+        await interaction.deferReply({ ephemeral: true });
+
+        let row, reaction;
+        try {
+            const channel = interaction.channel ?? await this.client.channels.fetch(interaction.channelId);
+            const message = await channel.messages.fetch({ message: interaction.targetId, force: true });
+            if (message.author.id !== this.client.user.id || !message.embeds[0]?.title?.startsWith('[抽獎]')) {
+                await interaction.editReply('❌ 這不是機器人發出的抽獎訊息。');
+                return;
+            }
+
+            ({ row, reaction } = await this.findRaffleReaction(message));
+            if (row?.ended) {
+                await interaction.editReply('⚠️ 這場抽獎已經結束並公布過了，不會重複抽獎。');
+                return;
+            }
+            if (!row) {
+                const parsed = this.parseRaffleEmbed(message);
+                if (!parsed) {
+                    await interaction.editReply('❌ 無法從訊息讀取抽獎內容（標題或中獎名額格式不符）。');
+                    return;
+                }
+                row = {
+                    message_id: message.id, channel_id: channel.id, guild_id: interaction.guild.id,
+                    ...parsed,
+                    emoji: reaction ? reaction.emoji.toString() : '🎉',
+                    end_time: Date.now(), host_id: interaction.user.id
+                };
+            }
+        } catch (error) {
+            console.error('讀取抽獎訊息失敗:', error);
+            await interaction.editReply('❌ 讀取抽獎訊息失敗，請確認機器人能讀取此頻道的訊息。').catch(() => {});
+            return;
+        }
+
+        // 會公開公布結果，先讓管理員確認
+        const confirmRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('raffle_force_confirm').setLabel('確認結束並公布').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('raffle_force_cancel').setLabel('取消').setStyle(ButtonStyle.Secondary)
+        );
+        const reply = await interaction.editReply({
+            content: `⚠️ 即將立刻結束抽獎並**公開公布結果**：\n**獎勵：** ${row.prize} ×${row.quantity}\n**中獎名額：** ${row.winner_count} 人\n**反應：** ${row.emoji}（目前 ${reaction ? reaction.count - (reaction.me ? 1 : 0) : 0} 人）`,
+            components: [confirmRow]
+        });
+
+        let click;
+        try {
+            click = await reply.awaitMessageComponent({ filter: i => i.user.id === interaction.user.id, time: 60000 });
+        } catch {
+            await interaction.editReply({ content: '⌛ 已逾時，未結束抽獎。', components: [] });
+            return;
+        }
+        if (click.customId === 'raffle_force_cancel') {
+            await click.update({ content: '已取消。', components: [] });
+            return;
+        }
+        await click.update({ content: '⏳ 抽獎中...', components: [] });
+
+        clearTimeout(this.timers.get(row.message_id));
+        this.timers.delete(row.message_id);
+        this.db.run(
+            `INSERT OR REPLACE INTO raffles (message_id, channel_id, guild_id, prize, quantity, winner_count, emoji, end_time, host_id, ended) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+            [row.message_id, row.channel_id, row.guild_id, row.prize, row.quantity, row.winner_count, row.emoji, row.end_time, row.host_id]
+        );
+        const ok = await this.finalizeRaffle(row);
+        await interaction.editReply(ok ? '✅ 抽獎已結束，結果已公布，中獎名單已送到管理頻道。' : '❌ 公布結果時發生錯誤，請查看機器人日誌。');
+    }
+
     async handleInteraction(interaction) {
         if (interaction.isMessageContextMenuCommand() && interaction.commandName === VIEW_REACTORS_NAME) {
             await this.handleViewReactors(interaction);
+            return true;
+        }
+        if (interaction.isMessageContextMenuCommand() && interaction.commandName === FORCE_END_NAME) {
+            await this.handleForceEnd(interaction);
             return true;
         }
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'raffle') return false;
@@ -265,48 +357,54 @@ class RaffleSystem {
         this.db.get(`SELECT * FROM raffles WHERE message_id = ? AND ended = 0`, [messageId], async (err, row) => {
             if (err || !row) return;
             this.db.run(`UPDATE raffles SET ended = 1 WHERE message_id = ?`, [messageId]);
-
-            try {
-                const channel = await this.client.channels.fetch(row.channel_id);
-                const message = await channel.messages.fetch(row.message_id);
-                const reaction = message.reactions.cache.find(r => r.emoji.toString() === row.emoji || r.emoji.name === row.emoji);
-
-                let reactors = [];
-                if (reaction) reactors = await this.fetchAllReactors(reaction);
-                const winners = this.pickWinners(reactors, row.winner_count);
-
-                if (winners.length === 0) {
-                    const emptyEmbed = new EmbedBuilder()
-                        .setColor(0x95a5a6)
-                        .setTitle(`[結果公布] ${row.prize} x ${row.quantity}`)
-                        .setDescription('本次抽獎沒有人參加，未產生中獎者。')
-                        .setTimestamp();
-                    await channel.send({ embeds: [emptyEmbed] });
-                    await this.sendAdminResult(row, []);
-                    return;
-                }
-
-                const winnerInfos = await Promise.all(winners.map(async user => ({
-                    user,
-                    email: await this.lookupGameEmail(user.id)
-                })));
-
-                const mentions = winners.map(u => `<@${u.id}>`).join(' ');
-                const winnerLines = winnerInfos
-                    .map(w => w.email ? `<@${w.user.id}>` : `<@${w.user.id}> (棄權/未連結帳號)`)
-                    .join('\n');
-                const publicEmbed = new EmbedBuilder()
-                    .setColor(0xf1c40f)
-                    .setTitle(`[結果公布] ${row.prize} x ${row.quantity}`)
-                    .setDescription(`**🏆 中獎者：**\n${winnerLines}\n\n📬 **中獎獎勵將在一週內透過信箱發送**\n獎品將在發信後一週內過期，未領取將視為放棄`)
-                    .setTimestamp();
-                await channel.send({ content: mentions, embeds: [publicEmbed] });
-
-                await this.sendAdminResult(row, winnerInfos);
-            } catch (error) {
-                console.error('結束抽獎失敗:', error);
-            }
+            await this.finalizeRaffle(row);
         });
+    }
+
+    // 抽出中獎者並公布；回傳是否成功
+    async finalizeRaffle(row) {
+        try {
+            const channel = await this.client.channels.fetch(row.channel_id);
+            const message = await channel.messages.fetch(row.message_id);
+            const reaction = message.reactions.cache.find(r => r.emoji.toString() === row.emoji || r.emoji.name === row.emoji);
+
+            let reactors = [];
+            if (reaction) reactors = await this.fetchAllReactors(reaction);
+            const winners = this.pickWinners(reactors, row.winner_count);
+
+            if (winners.length === 0) {
+                const emptyEmbed = new EmbedBuilder()
+                    .setColor(0x95a5a6)
+                    .setTitle(`[結果公布] ${row.prize} x ${row.quantity}`)
+                    .setDescription('本次抽獎沒有人參加，未產生中獎者。')
+                    .setTimestamp();
+                await channel.send({ embeds: [emptyEmbed] });
+                await this.sendAdminResult(row, []);
+                return true;
+            }
+
+            const winnerInfos = await Promise.all(winners.map(async user => ({
+                user,
+                email: await this.lookupGameEmail(user.id)
+            })));
+
+            const mentions = winners.map(u => `<@${u.id}>`).join(' ');
+            const winnerLines = winnerInfos
+                .map(w => w.email ? `<@${w.user.id}>` : `<@${w.user.id}> (棄權/未連結帳號)`)
+                .join('\n');
+            const publicEmbed = new EmbedBuilder()
+                .setColor(0xf1c40f)
+                .setTitle(`[結果公布] ${row.prize} x ${row.quantity}`)
+                .setDescription(`**🏆 中獎者：**\n${winnerLines}\n\n📬 **中獎獎勵將在一週內透過信箱發送**\n獎品將在發信後一週內過期，未領取將視為放棄`)
+                .setTimestamp();
+            await channel.send({ content: mentions, embeds: [publicEmbed] });
+
+            await this.sendAdminResult(row, winnerInfos);
+            return true;
+        } catch (error) {
+            console.error('結束抽獎失敗:', error);
+            return false;
+        }
     }
 
     async sendAdminResult(row, winnerInfos) {
