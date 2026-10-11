@@ -1,9 +1,10 @@
 // raffle-system.js - 獨立的抽獎系統模塊
 // 使用方法：在 bot.js 中引入 const RaffleSystem = require('./raffle-system');
 
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, EmbedBuilder, PermissionFlagsBits, AttachmentBuilder } = require('discord.js');
 
 const MAX_TIMEOUT = 2147483647;
+const VIEW_REACTORS_NAME = '查看抽獎參加者';
 
 class RaffleSystem {
     constructor(config = {}) {
@@ -40,7 +41,12 @@ class RaffleSystem {
             .addStringOption(o => o.setName('抽獎時長').setDescription('例如 30m、3h、2d').setRequired(true))
             .addIntegerOption(o => o.setName('抽取人數').setDescription('中獎人數').setRequired(true).setMinValue(1))
             .addStringOption(o => o.setName('表情符號').setDescription('參加用的表情符號（預設 🎉）').setRequired(false));
-        return [raffleCommand];
+        // 右鍵訊息 → 應用程式；僅管理員可見
+        const viewReactorsCommand = new ContextMenuCommandBuilder()
+            .setName(VIEW_REACTORS_NAME)
+            .setType(ApplicationCommandType.Message)
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+        return [raffleCommand, viewReactorsCommand];
     }
 
     getCommands() {
@@ -126,7 +132,80 @@ class RaffleSystem {
         }
     }
 
+    formatEntry(w, i) {
+        return `${i + 1}. <@${w.user.id}>（${w.user.username}）\n${w.email || '(未綁定)'}`;
+    }
+
+    // 盡量找出抽獎用的反應：DB 記錄 → 機器人自己按的 → 人數最多的
+    async findRaffleReaction(message) {
+        const row = await new Promise(resolve =>
+            this.db.get(`SELECT * FROM raffles WHERE message_id = ?`, [message.id], (err, r) => resolve(err ? null : r)));
+        const reactions = [...message.reactions.cache.values()];
+        let reaction = row && reactions.find(r => r.emoji.toString() === row.emoji || r.emoji.name === row.emoji);
+        if (!reaction) reaction = reactions.find(r => r.me);
+        if (!reaction) reaction = reactions.sort((a, b) => b.count - a.count)[0];
+        return { row, reaction };
+    }
+
+    async handleViewReactors(interaction) {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            await interaction.reply({ content: '❌ 你沒有權限使用此指令！', ephemeral: true });
+            return;
+        }
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+            const channel = interaction.channel ?? await this.client.channels.fetch(interaction.channelId);
+            const message = await channel.messages.fetch({ message: interaction.targetId, force: true });
+            const { row, reaction } = await this.findRaffleReaction(message);
+            if (!reaction) {
+                await interaction.editReply('⚠️ 這則訊息沒有任何反應。');
+                return;
+            }
+
+            const reactors = await this.fetchAllReactors(reaction);
+            const infos = await Promise.all(reactors.map(async user => ({
+                user,
+                email: await this.lookupGameEmail(user.id)
+            })));
+            const linkedCount = infos.filter(w => w.email).length;
+            const prize = row ? `${row.prize} ×${row.quantity}` : (message.embeds[0]?.title || '（未知）');
+            const header = `**獎勵：** ${prize}\n**反應：** ${reaction.emoji.toString()}\n**參加人數：** ${infos.length}（已綁定 ${linkedCount}）`;
+
+            // embed description 上限 4096，名單過長時分段
+            const chunks = [];
+            let current = '';
+            infos.map((w, i) => this.formatEntry(w, i)).forEach(entry => {
+                if (current.length + entry.length + 2 > 3800) { chunks.push(current); current = ''; }
+                current += (current ? '\n\n' : '') + entry;
+            });
+            if (current || chunks.length === 0) chunks.push(current || '（目前無人參加）');
+
+            const embeds = chunks.map((chunk, i) => new EmbedBuilder()
+                .setColor(0x9b59b6)
+                .setTitle(i === 0 ? '🎁 抽獎參加者名單（管理員）' : `🎁 抽獎參加者名單（續 ${i + 1}/${chunks.length}）`)
+                .setDescription(i === 0 ? `${header}\n\n${chunk}` : chunk)
+                .setTimestamp());
+
+            // 附上純文字檔方便複製信箱補償
+            const txt = infos.map(w => `${w.user.username}\t${w.user.id}\t${w.email || '(未綁定)'}`).join('\n');
+            const file = new AttachmentBuilder(Buffer.from(txt || '（目前無人參加）', 'utf8'), { name: `raffle-${message.id}.txt` });
+
+            await interaction.editReply({ embeds: [embeds[0]], files: [file] });
+            for (const embed of embeds.slice(1)) {
+                await interaction.followUp({ embeds: [embed], ephemeral: true });
+            }
+        } catch (error) {
+            console.error('查看抽獎參加者失敗:', error);
+            await interaction.editReply('❌ 讀取參加者失敗，請確認機器人能讀取此頻道的訊息。').catch(() => {});
+        }
+    }
+
     async handleInteraction(interaction) {
+        if (interaction.isMessageContextMenuCommand() && interaction.commandName === VIEW_REACTORS_NAME) {
+            await this.handleViewReactors(interaction);
+            return true;
+        }
         if (!interaction.isChatInputCommand() || interaction.commandName !== 'raffle') return false;
 
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -234,7 +313,7 @@ class RaffleSystem {
         try {
             const adminChannel = await this.client.channels.fetch(this.adminChannelId);
             const list = winnerInfos.length
-                ? winnerInfos.map((w, i) => `${i + 1}. <@${w.user.id}>（${w.user.username}）\n${w.email || '(未綁定)'}`).join('\n\n')
+                ? winnerInfos.map((w, i) => this.formatEntry(w, i)).join('\n\n')
                 : '（本次無人參加）';
 
             const adminEmbed = new EmbedBuilder()
